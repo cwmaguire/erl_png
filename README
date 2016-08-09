@@ -1,0 +1,10 @@
+Erlang decoder
+==========================
+
+Decodes PNG files to arrays of binary scanlines.
+
+Uncompresses and unfilters the scanlines.
+
+Only works for RGB and RGBA with 'none' or 'sub' filtering.
+
+I'm building this to muck around with image data. And because I was curious.
