@@ -1,6 +1,7 @@
 -module(png).
 
 -export([read/1]).
+-export([write/2]).
 -export([data/1]).
 %-export([sub/2]).
 
@@ -47,6 +48,13 @@ read(Path) ->
     CompressedPng = read_chunks(Rest, #png{}),
     Pixels = pixels(CompressedPng, inflate(CompressedPng#png.data)),
     CompressedPng#png{pixels = Pixels, data = <<>>}.
+
+write(Png = #png{}, Path) ->
+    Preamble = <<137, 80, 78, 71, 13, 10, 26, 10>>,
+    HeaderChunk = header_chunk(Png),
+    EndChunk = end_chunk(),
+    DataChunks = data_chunks(Png#png.pixels),
+    ok = file:write_file(Path, [Preamble, HeaderChunk, DataChunks, EndChunk]).
 
 read_chunks(<<>>, Png = #png{text = Text, other = Other}) ->
     io:format("Ran out of data, missing IEND.~n~n"),
@@ -134,10 +142,10 @@ read_chunks(<<ChunkLength:32/integer,
 read_chunks(<<ChunkLength:32/integer,
               "IDAT",
               Data0:ChunkLength/binary,
-              _CRC:4/binary,
+              _CRC:32/integer,
               Rest/binary>>,
             Png) ->
-    io:format("IDAT:~p, ", [size(Data0)]),
+    io:format("IDAT:~p/~p, ", [ChunkLength, size(Data0)]),
     Data = <<(Png#png.data)/binary, Data0/binary>>,
     read_chunks(Rest, Png#png{data = Data});
 read_chunks(<<ChunkLength:32/integer,
@@ -289,3 +297,41 @@ sub(<<SubtractedByte:1/binary, SubBytes/binary>>,
     sub(<<SubBytes/binary, Byte/binary>>,
         <<ProcessedBytes/binary, Byte/binary>>,
         Rest).
+
+header_chunk(#png{header = H}) ->
+    Length = <<13:32>>,
+    Header = <<"IHDR",
+               (H#header.width):32/integer,
+               (H#header.height):32/integer,
+               (H#header.bit_depth):8/integer,
+               (H#header.color_type):8/integer,
+               (H#header.compression):8/integer,
+               (H#header.filter):8/integer,
+               (H#header.interlace):8/integer>>,
+    io:format("Header: ~p~n", [Header]),
+    CRC = erlang:crc32(Header),
+    <<Length/binary, Header/binary, CRC:32/integer>>.
+
+end_chunk() ->
+    Length = <<0:32/integer>>,
+    End = <<"IEND">>,
+    <<Length/binary, End/binary, (erlang:crc32(End)):32/integer>>.
+
+data_chunks(Scanlines) ->
+    [data_chunk(Scanline) || Scanline <- Scanlines].
+
+data_chunk(Scanline) ->
+    ChunkType = <<"IDAT">>,
+    FilterType = ?NO_FILTER,
+    Compressed = list_to_binary(compress(<<FilterType, Scanline/binary>>)),
+    Length = <<(size(Compressed)):32/integer>>,
+    CRC = erlang:crc32(<<ChunkType/binary, Compressed/binary>>),
+    CRCBin = <<CRC:32/integer>>,
+    [Length, ChunkType, Compressed, CRCBin].
+
+compress(Data) ->
+    Z = zlib:open(),
+    ok = zlib:deflateInit(Z, 9),
+    Compressed = zlib:deflate(Z, Data, finish),
+    ok = zlib:deflateEnd(Z),
+    Compressed.
