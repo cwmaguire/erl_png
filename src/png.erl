@@ -240,8 +240,8 @@ pixels(#png{header = #header{width = Width,
 
 pixels(<<FilterType, Bytes/binary>>, BytesPerPixel) ->
     FilterFun = filter_fun(FilterType),
-    _Bytes = FilterFun(BytesPerPixel, Bytes).
-    %pixels_(BytesPerPixel, Bytes, _Pixels = []).
+    Bytes = FilterFun(BytesPerPixel, Bytes),
+    pixels_(BytesPerPixel, Bytes, _Pixels = []).
 
 pixels_(_, <<>>, Pixels) ->
     lists:reverse(Pixels);
