@@ -3,7 +3,6 @@
 -export([read/1]).
 -export([write/2]).
 -export([data/1]).
-%-export([sub/2]).
 
 -define(MAX_SAMPLE_SIZE, 10).
 -define(UNKNOWN_UNIT, 0).
@@ -318,16 +317,26 @@ end_chunk() ->
     <<Length/binary, End/binary, (erlang:crc32(End)):32/integer>>.
 
 data_chunks(Scanlines) ->
-    [data_chunk(Scanline) || Scanline <- Scanlines].
+    Binary = list_to_binary([scanline(Scanline) || Scanline <- Scanlines]),
+    Compressed = list_to_binary(compress(<<Binary/binary>>)),
+    lists:reverse(data_chunks(Compressed, [])).
 
-data_chunk(Scanline) ->
-    ChunkType = <<"IDAT">>,
+scanline(Pixels) ->
     FilterType = ?NO_FILTER,
-    Compressed = list_to_binary(compress(<<FilterType, Scanline/binary>>)),
-    Length = <<(size(Compressed)):32/integer>>,
-    CRC = erlang:crc32(<<ChunkType/binary, Compressed/binary>>),
+    Binary = list_to_binary([[R, G, B, A] || #px{r = R, g = G, b = B, a = A} <- Pixels]),
+    [FilterType, Binary].
+
+data_chunks(<<Chunk:10000/binary, Rest/binary>>, Chunks) ->
+    data_chunks(Rest, [data_chunk(Chunk) | Chunks]);
+data_chunks(<<Chunk/binary>>, Chunks) ->
+    [data_chunk(Chunk) | Chunks].
+
+data_chunk(Chunk) ->
+    ChunkType = <<"IDAT">>,
+    Length = <<(size(Chunk)):32/integer>>,
+    CRC = erlang:crc32(<<ChunkType/binary, Chunk/binary>>),
     CRCBin = <<CRC:32/integer>>,
-    [Length, ChunkType, Compressed, CRCBin].
+    [Length, ChunkType, Chunk, CRCBin].
 
 compress(Data) ->
     Z = zlib:open(),
