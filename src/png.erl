@@ -239,8 +239,8 @@ pixels(#png{header = #header{width = Width,
 
 pixels(<<FilterType, Bytes/binary>>, BytesPerPixel) ->
     FilterFun = filter_fun(FilterType),
-    Bytes = FilterFun(BytesPerPixel, Bytes),
-    pixels_(BytesPerPixel, Bytes, _Pixels = []).
+    Unfiltered = FilterFun(BytesPerPixel, Bytes),
+    pixels_(BytesPerPixel, Unfiltered, _Pixels = []).
 
 pixels_(_, <<>>, Pixels) ->
     lists:reverse(Pixels);
@@ -284,17 +284,17 @@ filter_fun(?SUB_FILTER) ->
 
 %% current byte minus previous aligned byte
 sub(BytesPerPixel, Scanline) ->
-    <<FirstBytes:BytesPerPixel/binary, Rest/binary>> = Scanline,
-    sub(FirstBytes, FirstBytes, Rest).
+    <<LastBytes:BytesPerPixel/binary, Rest/binary>> = Scanline,
+    sub(LastBytes, LastBytes, Rest).
 
 sub(_, ProcessedBytes, <<>>) ->
     ProcessedBytes;
-sub(<<SubtractedByte:1/binary, SubBytes/binary>>,
+sub(<<SubtractedByte:8/integer, SubBytes/binary>>,
     ProcessedBytes,
-    <<FilteredByte:1/binary, Rest/binary>>) ->
-    Byte = (FilteredByte + SubtractedByte) div 256,
-    sub(<<SubBytes/binary, Byte/binary>>,
-        <<ProcessedBytes/binary, Byte/binary>>,
+    <<FilteredByte:8/integer, Rest/binary>>) ->
+    Byte = (FilteredByte + SubtractedByte) rem 256,
+    sub(<<SubBytes/binary, Byte:8/integer>>,
+        <<ProcessedBytes/binary, Byte:8/integer>>,
         Rest).
 
 header_chunk(#png{header = H}) ->
