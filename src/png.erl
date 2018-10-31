@@ -1,5 +1,7 @@
 -module(png).
 
+-include("png.hrl").
+
 -export([read/1]).
 -export([write/2]).
 -export([data/1]).
@@ -12,31 +14,6 @@
 -define(NO_FILTER, 0).
 -define(SUB_FILTER, 1).
 
--record(header, {width :: integer(),
-                 height :: integer(),
-                 bit_depth :: integer(),
-                 color_type :: integer(),
-                 compression :: integer(),
-                 filter :: integer(),
-                 interlace :: integer()}).
-
--record(chunk, {type :: binary(),
-                data :: binary()}).
-
--record(px, {r = 0 :: integer(),
-             g = 0 :: integer(),
-             b = 0 :: integer(),
-             a :: integer()}).
-
--record(png, {header :: #header{},
-              background,
-              physical,
-              srgb :: integer(),
-              text = [] :: list(binary()),
-              data = <<>> :: binary(),
-              pixels = [] :: [#px{}],
-              other = [] :: list(#chunk{})}).
-
 data(#png{data = Data}) ->
     Data.
 
@@ -48,11 +25,12 @@ read(Path) ->
     Pixels = pixels(CompressedPng, inflate(CompressedPng#png.data)),
     CompressedPng#png{pixels = Pixels, data = <<>>}.
 
-write(Png = #png{}, Path) ->
+write(Png = #png{header = #header{width = W}}, Path) ->
     Preamble = <<137, 80, 78, 71, 13, 10, 26, 10>>,
     HeaderChunk = header_chunk(Png),
     EndChunk = end_chunk(),
-    DataChunks = data_chunks(Png#png.pixels),
+    Scanlines = pixels_to_scanlines(W, Png#png.pixels),
+    DataChunks = data_chunks(Scanlines),
     ok = file:write_file(Path, [Preamble, HeaderChunk, DataChunks, EndChunk]).
 
 read_chunks(<<>>, Png = #png{text = Text, other = Other}) ->
@@ -275,6 +253,7 @@ scanlines(<<>>, {_, Scanlines}) ->
     lists:reverse(Scanlines);
 scanlines(Data, {BytesPerLine, Scanlines}) ->
     <<Line:BytesPerLine/binary, Rest/binary>> = Data,
+    io:format("New scanline: ~n~p~n", [Line]),
     scanlines(Rest, {BytesPerLine, [Line | Scanlines]}).
 
 filter_fun(?NO_FILTER) ->
@@ -307,7 +286,7 @@ header_chunk(#png{header = H}) ->
                (H#header.compression):8/integer,
                (H#header.filter):8/integer,
                (H#header.interlace):8/integer>>,
-    io:format("Header: ~p~n", [Header]),
+    %io:format("Header: ~p~n", [Header]),
     CRC = erlang:crc32(Header),
     <<Length/binary, Header/binary, CRC:32/integer>>.
 
@@ -316,12 +295,25 @@ end_chunk() ->
     End = <<"IEND">>,
     <<Length/binary, End/binary, (erlang:crc32(End)):32/integer>>.
 
+pixels_to_scanlines(Width, Pixels) ->
+    io:format("Scanlines:~n"),
+    pixels_to_scanlines(Width, Pixels, []).
+
+pixels_to_scanlines(Width, Pixels, Scanlines) when length(Pixels) =< Width ->
+    lists:reverse(Scanlines);
+pixels_to_scanlines(Width, Pixels, Scanlines) ->
+    {Head, Tail} = lists:split(Width, Pixels),
+    Alphas = [A || #px{a = A} <- Head],
+    io:format("~p~n", [Alphas]),
+    pixels_to_scanlines(Width, Tail, [Head | Scanlines]).
+
 data_chunks(Scanlines) ->
     Binary = list_to_binary([scanline(Scanline) || Scanline <- Scanlines]),
     Compressed = list_to_binary(compress(<<Binary/binary>>)),
     lists:reverse(data_chunks(Compressed, [])).
 
 scanline(Pixels) ->
+    %io:format("scanline(~p)~n", [Pixels]),
     FilterType = ?NO_FILTER,
     Binary = list_to_binary([[R, G, B, A] || #px{r = R, g = G, b = B, a = A} <- Pixels]),
     [FilterType, Binary].

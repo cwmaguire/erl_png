@@ -1,0 +1,5 @@
+{application, png,
+[{description, "PNG reader/writer"},
+{vsn, "0.1"},
+{modules, [png, debug]},
+{env, []}]}.
