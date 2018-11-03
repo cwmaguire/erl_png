@@ -25,11 +25,19 @@ read(Path) ->
     Pixels = pixels(CompressedPng, inflate(CompressedPng#png.data)),
     CompressedPng#png{pixels = Pixels, data = <<>>}.
 
-write(Png = #png{header = #header{width = W}}, Path) ->
+write_pixels(Png = #png{header = #header{width = W}}, Path) ->
     Preamble = <<137, 80, 78, 71, 13, 10, 26, 10>>,
     HeaderChunk = header_chunk(Png),
     EndChunk = end_chunk(),
     Scanlines = pixels_to_scanlines(W, Png#png.pixels),
+    DataChunks = data_chunks(Scanlines),
+    ok = file:write_file(Path, [Preamble, HeaderChunk, DataChunks, EndChunk]).
+
+write_scanlines(Png, Path) ->
+    Preamble = <<137, 80, 78, 71, 13, 10, 26, 10>>,
+    HeaderChunk = header_chunk(Png),
+    EndChunk = end_chunk(),
+    Scanlines = Png#png.pixels,
     DataChunks = data_chunks(Scanlines),
     ok = file:write_file(Path, [Preamble, HeaderChunk, DataChunks, EndChunk]).
 
