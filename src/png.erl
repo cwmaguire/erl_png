@@ -3,7 +3,8 @@
 -include("png.hrl").
 
 -export([read/1]).
--export([write/2]).
+-export([write_pixels/2]).
+-export([write_scanlines/2]).
 -export([data/1]).
 
 -define(MAX_SAMPLE_SIZE, 10).
